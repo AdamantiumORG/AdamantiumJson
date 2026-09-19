@@ -1,0 +1,37 @@
+[package]
+name = "AdamantiumJson"
+version = "0.1.0"
+abi = "wasi-command-v1"
+description = "JSON parsing, serialization and file operations for Adamantium"
+authors = ["AdamantiumORG"]
+license = "GPL-3.0-or-later"
+repository = "https://github.com/AdamantiumORG/AdamantiumJson"
+
+[permissions]
+filesystem = "read-write"
+
+[functions.parse]
+parameters = ["string"]
+result = "string"
+
+[functions.compact]
+parameters = ["string"]
+result = "string"
+
+[functions.type_of]
+parameters = ["string"]
+result = "string"
+command = "type-of"
+
+[functions.is_valid]
+parameters = ["string"]
+result = "bool"
+command = "is-valid"
+
+[functions.read]
+parameters = ["string"]
+result = "string"
+
+[functions.write]
+parameters = ["string", "string"]
+result = "None"

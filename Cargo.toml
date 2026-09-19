@@ -1,0 +1,22 @@
+[package]
+name = "adamantium-json"
+version = "0.1.0"
+edition = "2024"
+description = "JSON package for Adamantium"
+repository = "https://github.com/AdamantiumORG/AdamantiumJson"
+publish = false
+
+[dependencies]
+serde_json = "1"
+
+[lib]
+name = "adamantium_json"
+
+[[bin]]
+name = "adamantium-json"
+path = "src/main.rs"
+
+[profile.release]
+opt-level = "s"
+lto = true
+strip = true
