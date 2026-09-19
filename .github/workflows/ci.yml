@@ -1,0 +1,111 @@
+name: Test AdamantiumJson
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+          targets: wasm32-wasip1
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Check formatting
+        run: cargo fmt --all -- --check
+      - name: Lint
+        run: cargo clippy --locked --all-targets -- -D warnings
+      - name: Test native JSON operations
+        run: cargo test --locked
+      - name: Build WASI package
+        run: cargo build --locked --release --target wasm32-wasip1 --bin adamantium-json
+      - name: Validate and execute WASM JSON tests
+        run: node tests/wasi.mjs
+      - name: Prepare package assets
+        if: matrix.os == 'ubuntu-latest'
+        shell: bash
+        run: |
+          cp target/wasm32-wasip1/release/adamantium-json.wasm adamantium_packet.wasm
+          version=$(sed -n '/^\[package\]/,/^\[/ s/^version = "\(.*\)"/\1/p' Cargo.toml)
+          tag="adamantium_packet_${version//./_}"
+          wasm_hash=$(sha256sum adamantium_packet.wasm | cut -d' ' -f1)
+          manifest_hash=$(sha256sum adamantium_packet.toml | cut -d' ' -f1)
+          printf '%s  adamantium_packet.wasm\n%s  adamantium_packet.toml\n' "$wasm_hash" "$manifest_hash" > SHA256SUMS
+          printf '{\n  "format": 1,\n  "name": "AdamantiumJson",\n  "version": "%s",\n  "abi": "wasi-command-v1",\n  "tag": "%s",\n  "wasm_sha256": "%s",\n  "manifest_sha256": "%s"\n}\n' "$version" "$tag" "$wasm_hash" "$manifest_hash" > adamantium_packet.release.json
+      - name: Upload tested package
+        if: matrix.os == 'ubuntu-latest'
+        uses: actions/upload-artifact@v4
+        with:
+          name: adamantium-json-wasi
+          path: |
+            adamantium_packet.wasm
+            adamantium_packet.toml
+            SHA256SUMS
+            adamantium_packet.release.json
+          if-no-files-found: error
+
+  release:
+    name: Publish versioned Adamantium package
+    if: startsWith(github.ref, 'refs/tags/adamantium_packet_') && github.ref_name != 'adamantium_packet_nightly'
+    needs: test
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - name: Verify tag matches Cargo package version
+        shell: bash
+        run: |
+          version=$(sed -n '/^\[package\]/,/^\[/ s/^version = "\(.*\)"/\1/p' Cargo.toml)
+          expected="adamantium_packet_${version//./_}"
+          if [[ "$GITHUB_REF_NAME" != "$expected" ]]; then
+            echo "Tag '$GITHUB_REF_NAME' does not match Cargo version '$version'. Expected '$expected'." >&2
+            exit 1
+          fi
+      - uses: actions/download-artifact@v5
+        with:
+          name: adamantium-json-wasi
+      - name: Publish versioned release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release create "$GITHUB_REF_NAME" adamantium_packet.wasm adamantium_packet.toml SHA256SUMS adamantium_packet.release.json --generate-notes --verify-tag
+
+  nightly:
+    name: Update nightly Adamantium package
+    if: github.event_name == 'push' && github.ref == format('refs/heads/{0}', github.event.repository.default_branch)
+    needs: test
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v5
+        with:
+          name: adamantium-json-wasi
+      - name: Create or update nightly release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          sed -i 's/"tag": "[^"]*"/"tag": "adamantium_packet_nightly"/' adamantium_packet.release.json
+          if gh release view adamantium_packet_nightly --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            gh release upload adamantium_packet_nightly adamantium_packet.wasm adamantium_packet.toml SHA256SUMS adamantium_packet.release.json --clobber --repo "$GITHUB_REPOSITORY"
+            gh release edit adamantium_packet_nightly --prerelease --title "Adamantium package nightly" --target "$GITHUB_SHA" --repo "$GITHUB_REPOSITORY"
+          else
+            gh release create adamantium_packet_nightly adamantium_packet.wasm adamantium_packet.toml SHA256SUMS adamantium_packet.release.json --prerelease --title "Adamantium package nightly" --target "$GITHUB_SHA" --repo "$GITHUB_REPOSITORY"
+          fi
