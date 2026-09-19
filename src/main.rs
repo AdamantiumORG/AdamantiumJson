@@ -18,7 +18,10 @@ fn main() {
             return;
         }
         [command, path] if command == "read" => {
-            print!("{}", adamantium_json::read(path).unwrap_or_else(|e| fail(e)));
+            print!(
+                "{}",
+                adamantium_json::read(path).unwrap_or_else(|e| fail(e))
+            );
             return;
         }
         [command, path, text] if command == "write" => {
@@ -26,7 +29,9 @@ fn main() {
             return;
         }
         _ => {
-            eprintln!("Usage: adamantium-json <parse|compact|type-of|is-valid|read|write> <value> [json]");
+            eprintln!(
+                "Usage: adamantium-json <parse|compact|type-of|is-valid|read|write> <value> [json]"
+            );
             std::process::exit(2);
         }
     };

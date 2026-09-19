@@ -30,8 +30,8 @@ pub fn read(path: impl AsRef<Path>) -> io::Result<String> {
 }
 
 pub fn write(path: impl AsRef<Path>, text: &str) -> io::Result<()> {
-    let normalized = pretty(text)
-        .map_err(|error| io::Error::new(io::ErrorKind::InvalidInput, error))?;
+    let normalized =
+        pretty(text).map_err(|error| io::Error::new(io::ErrorKind::InvalidInput, error))?;
     fs::write(path, format!("{normalized}\n"))
 }
 
